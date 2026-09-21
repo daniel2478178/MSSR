@@ -352,10 +352,18 @@ if legacy_rate_figure.exists():
 
 
 # 3. Paired changes reveal small typical gains and occasional large losses.
-fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.8), sharey=True)
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(12.4, 5.6),
+    sharey=True,
+    facecolor="#F7F8FA",
+)
 rng = np.random.default_rng(7)
 positions = np.arange(len(TEST_COLUMNS))
 for panel, axis, train_noise in zip(("A", "B"), axes, (0.01, 0.03)):
+    axis.set_facecolor("white")
+    axis.set_axisbelow(True)
     for position, (test_noise, column) in zip(positions, TEST_COLUMNS.items()):
         comparison = pd.DataFrame(
             {
@@ -369,18 +377,23 @@ for panel, axis, train_noise in zip(("A", "B"), axes, (0.01, 0.03)):
         axis.scatter(
             position + jitter,
             delta,
-            s=18,
+            s=24,
             color=COLORS[train_noise],
-            alpha=0.55,
-            edgecolors="none",
+            alpha=0.48,
+            edgecolors="white",
+            linewidths=0.35,
+            label=f"Train noise {train_noise:.2f}" if position == positions[0] else "_nolegend_",
         )
         axis.scatter(
             position,
             np.median(delta),
-            s=58,
+            s=76,
             marker="D",
-            color="#111111",
+            color="#17202A",
+            edgecolors="white",
+            linewidths=0.8,
             zorder=4,
+            label="Median" if position == positions[0] else "_nolegend_",
         )
         invalid_count = comparison["noisy"].isna().sum()
         if invalid_count:
@@ -393,33 +406,57 @@ for panel, axis, train_noise in zip(("A", "B"), axes, (0.01, 0.03)):
                 invalid_x,
                 [-250] * invalid_count,
                 marker="v",
-                s=55,
-                color="#111111",
+                s=48,
+                color="#17202A",
                 zorder=5,
+                label="Invalid result" if position == positions[0] else "_nolegend_",
             )
-    axis.axhline(0, color="#333333", linewidth=1)
+
+    axis.axhline(0, color="#17202A", linewidth=1.4, zorder=1)
     axis.set_yscale("symlog", linthresh=1e-4)
     axis.set_ylim(-300, 0.05)
     axis.set_xticks(positions)
     axis.set_xticklabels(["0", "0.01", "0.03", "0.05", "0.10"])
     axis.set_xlabel("Testing noise")
     axis.set_title(f"({panel}) Train noise {train_noise:.2f} vs train noise 0")
-    axis.grid(axis="y", linestyle=":", alpha=0.3)
+    axis.grid(axis="y", linestyle="--", linewidth=0.75, color="#D8DDE3", alpha=0.9)
+    axis.spines["top"].set_visible(True)
+    axis.spines["right"].set_visible(True)
+    axis.spines["left"].set_color("#AEB7C2")
+    axis.spines["bottom"].set_color("#AEB7C2")
+    axis.tick_params(colors="#344054")
+legend_entries = {}
+for legend_axis in axes:
+    for handle, label in zip(*legend_axis.get_legend_handles_labels()):
+        legend_entries.setdefault(label, handle)
+legend_handles = list(legend_entries.values())
+legend_labels = list(legend_entries)
+fig.legend(
+    legend_handles,
+    legend_labels,
+    loc="upper center",
+    bbox_to_anchor=(0.5, 0.91),
+    ncol=3,
+    frameon=True,
+    fancybox=False,
+    facecolor="#F7F8FA",
+    edgecolor="none",
+    columnspacing=1.8,
+    handletextpad=0.6,
+)
 axes[0].set_ylabel("Paired ΔR² (noisy training − clean training)")
 axes[0].set_yticks([-100, -10, -1, -0.1, -0.01, -0.001, 0, 0.001, 0.01])
 axes[0].set_yticklabels(
     ["−100", "−10", "−1", "−0.1", "−0.01", "−0.001", "0", "0.001", "0.01"]
 )
-fig.suptitle("Paired effect of adding training noise", y=1.02)
-fig.text(
-    0.5,
-    -0.02,
-    "Diamonds mark valid-pair medians; triangles at the floor mark failed evaluations.",
-    ha="center",
-    color="#555555",
-    fontsize=9,
+fig.suptitle(
+    "Paired effect of adding training noise",
+    y=0.985,
+    fontsize=16,
+    fontweight="bold",
+    color="#17202A",
 )
-fig.tight_layout()
+fig.subplots_adjust(left=0.085, right=0.985, bottom=0.14, top=0.73, wspace=0.07)
 save_figure(fig, "03_paired_training_noise_effect.png")
 
 
