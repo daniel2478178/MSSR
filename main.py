@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the MSSR-PySR experiment pipeline with linked, configurable paths."""
+"""Run the MSSR experiment pipeline with linked, configurable paths."""
 
 from __future__ import annotations
 

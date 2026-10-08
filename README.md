@@ -1,6 +1,6 @@
-# MSSR-PySR
+# MSSR
 
-MSSR-PySR is an experimental pipeline for discovering one symbolic formula that
+MSSR is an experimental pipeline for discovering one symbolic formula that
 works across several related physics datasets. PySR proposes candidate
 expressions, numeric coefficients are generalized into fitted parameters, and
 the resulting structures are ranked by their performance across multiple
@@ -9,6 +9,15 @@ datasets.
 The repository contains a 59-problem physics benchmark (`P01`–`P59`), generated
 CSV data, PySR discovery scripts, shared-formula evaluation, distribution-shift
 tests, and reporting utilities.
+
+The repository is [daniel2478178/MSSR](https://github.com/daniel2478178/MSSR).
+Clone it directly, or initialize the `MSSR/` submodule in the parent MDSR
+repository:
+
+```bash
+git clone https://github.com/daniel2478178/MSSR.git
+cd MSSR
+```
 
 ## Pipeline overview
 
@@ -49,7 +58,8 @@ resolution and stage orchestration live in Python.
 - Matplotlib
 - PySR, including its Julia/SymbolicRegression backend
 
-Conda is the recommended setup because PySR also manages a Julia backend:
+Conda is the recommended setup because PySR also manages a Julia backend.
+The environment retains the name `mdsr-pysr` for compatibility:
 
 ```bash
 conda env create -f environment.yml
