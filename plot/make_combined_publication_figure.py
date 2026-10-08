@@ -1,9 +1,12 @@
 """Create a publication-style two-panel comparison figure from the source workbooks."""
 
+import os
 from pathlib import Path
 
 import matplotlib
+#setting working dir as file path's parent
 
+#os.chdir(os.path.dirname(os.path.pardir( os.path.abspath(__file__))))
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -21,27 +24,40 @@ TEST_COLUMNS = {
     0.00: "noise_0_R2",
     0.01: "noise_001_R2",
     0.03: "noise_003_R2",
-    0.05: "noise_005_R2",
+    0.05: "noise_005_R2",  
     0.10: "noise_01_R2",
 }
 TEST_NOISE = np.array(list(TEST_COLUMNS))
-FAILURE_LIMIT = -1e50
+FAILURE_LIMIT = -np.inf
 
 COLORS = {
-    "MDSR": "#1F4E79",
-    "MDSR with parameters": "#D58A00",
-    "MDSR, train noise 0": "#1F4E79",
-    "MDSR, train noise 0.01": "#2E8B57",
-    "MDSR, train noise 0.03": "#C44E52",
-    "LLM-MDSR, train noise 0": "#D58A00",
-    "LLM-MDSR, train noise 0.01": "#2E8B57",
+    "MSSR without parameters": "#1F4E79",
+    "MSSR with parameters": "#D58A00",
+    "MSSR, train noise 0": "#1F4E79",
+    "MSSR, train noise 0.01": "#00FD6E",
+    "MSSR, train noise 0.03": "#C44E52",
+    "LLM-MDSR, train noise 0": "#1F4E79",
+    "LLM-MDSR, train noise 0.01": "#2C724A",
     "LLM-MDSR, train noise 0.03": "#C44E52",
     "Perfect equations (clean)": "#7A5195",
 }
 DISTRIBUTION_COLORS = {
-    "MDSR without parameters": "#1F4E79",
-    "MDSR with parameters": "#D58A00",
-    "LLM-MDSR, train noise 0": "#2E8B57",
+    "MSSR without parameters": "#1F4E79",
+    "MSSR with parameters": "#D58A00",
+    "LLM-MDSR, train noise 0": "#2C724A",
+}
+TRAIN_NOISE_LINESTYLES = {
+    0.00: "-",
+    0.01: (0, (5, 2.5)),
+    0.03: ":",
+}
+WASSERSTEIN_SERIES = {
+    "MSSN_0": ("MSSR, train noise 0", 0.00, "s"),
+    "MSSN_01": ("MSSR, train noise 0.01", 0.01, "s"),
+    "MSSN_03": ("MSSR, train noise 0.03", 0.03, "s"),
+    "LLM-MDSR_0": ("LLM-MDSR, train noise 0", 0.00, "^"),
+    "LLM-MDSR_01": ("LLM-MDSR, train noise 0.01", 0.01, "^"),
+    "LLM-MDSR_03": ("LLM-MDSR, train noise 0.03", 0.03, "^"),
 }
 
 
@@ -134,6 +150,7 @@ def load_inputs():
     mdsr_parameters = read_frame(
         BASE_DIR / "带参数统计表格(1).xlsx",
         ["shared_fit_r2_0_7", "structure_similarity_score"],
+        complete=True,
     )
     llm = {
         noise: read_frame(
@@ -187,11 +204,11 @@ def plot_distributions(ax, mdsr, mdsr_parameters, llm):
     labels = r2_labels + structure_labels
     x = np.r_[np.arange(len(r2_labels)), np.arange(len(r2_labels) + 1, len(labels) + 1)]
     counts = {
-        "MDSR without parameters": np.r_[
+        "MSSR without parameters": np.r_[
             r2_counts(mdsr["shared_fit_r2_0_7"]),
             structure_counts(mdsr["structure_similarity_score"]),
         ],
-        "MDSR with parameters": np.r_[
+        "MSSR with parameters": np.r_[
             r2_counts(mdsr_parameters["shared_fit_r2_0_7"]),
             structure_counts(mdsr_parameters["structure_similarity_score"]),
         ],
@@ -200,6 +217,14 @@ def plot_distributions(ax, mdsr, mdsr_parameters, llm):
             structure_counts(llm[0.00]["SimilarityScore"]),
         ],
     }
+    for label, values in counts.items():
+        r2_total = int(values[: len(r2_labels)].sum())
+        structure_total = int(values[len(r2_labels) :].sum())
+        if r2_total != len(TASK_IDS) or structure_total != len(TASK_IDS):
+            raise ValueError(
+                f"{label}: expected 59 tasks in each distribution, "
+                f"got R2={r2_total}, structure={structure_total}"
+            )
     offsets = [-0.27, 0, 0.27]
     width = 0.25
     for offset, (label, values) in zip(offsets, counts.items()):
@@ -221,19 +246,20 @@ def plot_distributions(ax, mdsr, mdsr_parameters, llm):
             ha="center", va="bottom", fontsize=10, fontweight="bold")
     ax.set_xticks(x, labels, rotation=30, ha="right")
     ax.set_ylabel("Number of tasks")
-    ax.set_title("Distribution comparison", pad=28)
+    ax.set_title("(A) Distribution comparison", pad=28, fontname = 'Arial')
     ax.set_ylim(0, 42)
     ax.set_xlim(-0.75, x[-1] + 0.75)
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
 
-def plot_noise_comparison(ax, mdsr, llm, perfect, robustness):
+def plot_noise_comparison(
+    ax, mdsr, llm, perfect, robustness, title=None, show_legend=True
+):
     success_series = [
-        ("MDSR", success_rates(mdsr), "s", "--"),
-        ("LLM-MDSR, train noise 0", success_rates(llm[0.00]), "^", "-"),
-        ("LLM-MDSR, train noise 0.01", success_rates(llm[0.01]), "^", (0, (6, 2))),
-        ("LLM-MDSR, train noise 0.03", success_rates(llm[0.03]), "^", ":"),
-        ("Perfect equations (clean)", perfect_success_rates(perfect), "*", "--"),
+        ("LLM-MDSR, train noise 0", success_rates(llm[0.00]), "^", TRAIN_NOISE_LINESTYLES[0.00]),
+        ("LLM-MDSR, train noise 0.01", success_rates(llm[0.01]), "^", TRAIN_NOISE_LINESTYLES[0.01]),
+        ("LLM-MDSR, train noise 0.03", success_rates(llm[0.03]), "^", TRAIN_NOISE_LINESTYLES[0.03]),
+        ("Perfect equations (clean)", perfect_success_rates(perfect), "*", (0, (5, 2, 1.5, 2))),
     ]
     for label, values, marker, linestyle in success_series:
         ax.plot(
@@ -242,6 +268,7 @@ def plot_noise_comparison(ax, mdsr, llm, perfect, robustness):
             color=COLORS[label],
             marker=marker,
             linestyle=linestyle,
+            dash_capstyle="butt",
             linewidth=2.2,
             markersize=6,
             markerfacecolor="white" if label == "Perfect equations (clean)" else COLORS[label],
@@ -255,24 +282,25 @@ def plot_noise_comparison(ax, mdsr, llm, perfect, robustness):
         key=lambda value: int(value[1:]),
     )
     reliability_series = [
-        ("MDSR, train noise 0", robustness_reliability(robustness[0.00], common_ids), COLORS["MDSR, train noise 0"], "s"),
-        ("MDSR, train noise 0.01", robustness_reliability(robustness[0.01], common_ids), COLORS["MDSR, train noise 0.01"], "s"),
-        ("MDSR, train noise 0.03", robustness_reliability(robustness[0.03], common_ids), COLORS["MDSR, train noise 0.03"], "s"),
+        ("MSSR, train noise 0", robustness_reliability(robustness[0.00], common_ids), COLORS["MSSR, train noise 0"], "s", TRAIN_NOISE_LINESTYLES[0.00]),
+        ("MSSR, train noise 0.01", robustness_reliability(robustness[0.01], common_ids), COLORS["MSSR, train noise 0.01"], "s", TRAIN_NOISE_LINESTYLES[0.01]),
+        ("MSSR, train noise 0.03", robustness_reliability(robustness[0.03], common_ids), COLORS["MSSR, train noise 0.03"], "s", TRAIN_NOISE_LINESTYLES[0.03]),
     ]
     perfect_values = perfect[list(TEST_COLUMNS.values())].apply(pd.to_numeric, errors="coerce")
     perfect_outliers = perfect_values.lt(0).all(axis=1)
     perfect_clean = perfect_values.loc[~perfect_outliers]
     reliability_series.append(
-        ("Perfect equations (clean)", 100 * perfect_clean.ge(0.9).mean().to_numpy(), COLORS["Perfect equations (clean)"], "*")
+        ("Perfect equations (clean)", 100 * perfect_clean.ge(0.9).mean().to_numpy(), COLORS["Perfect equations (clean)"], "*", (0, (5, 2, 1.5, 2)))
     )
-    for label, values, color, marker in reliability_series:
+    for label, values, color, marker, linestyle in reliability_series:
         ax.plot(
             TEST_NOISE,
             values,
             color=color,
             marker=marker,
-            linestyle=(0, (3, 2)),
-            linewidth=1.5,
+            linestyle=linestyle,
+            dash_capstyle="butt",
+            linewidth=1.9,
             markersize=4.5,
             markerfacecolor="white",
             markeredgewidth=1.1,
@@ -280,15 +308,19 @@ def plot_noise_comparison(ax, mdsr, llm, perfect, robustness):
             zorder=2,
         )
 
-    ax.set_title("(A) Success rate and high-accuracy reliability")
-    ax.set_xlabel("Testing noise")
-    ax.set_ylabel(r"Success rate / fraction with $R^2 \geq 0.9$ (%)")
+    if title:
+        ax.set_title(title, fontname='Arial')
+    else:
+        ax.set_title("(B) Success rate", fontname='Arial')
+    ax.set_xlabel("(A) Testing noise")
+    ax.set_ylabel(r"Success rate ($\mathrm{R}^2 \geq 0.9$)")
     ax.set_xticks(TEST_NOISE, ["0", "0.01", "0.03", "0.05", "0.10"])
     ax.set_ylim(55, 105)
     ax.grid(axis="y", linestyle=":", alpha=0.35)
     legend_handles = [
         Line2D([0], [0], color=COLORS[label], marker=marker, linestyle=linestyle,
-               linewidth=2, markersize=5, markerfacecolor="white" if label == "Perfect equations (clean)" else COLORS[label],
+               dash_capstyle="butt", linewidth=2.4, markersize=5,
+               markerfacecolor="white" if label == "Perfect equations (clean)" else COLORS[label],
                label=label)
         for label, _, marker, linestyle in success_series
     ]
@@ -298,16 +330,26 @@ def plot_noise_comparison(ax, mdsr, llm, perfect, robustness):
             [0],
             color=color,
             marker=marker,
-            linestyle=(0, (3, 2)),
-            linewidth=1.5,
+            linestyle=linestyle,
+            dash_capstyle="butt",
+            linewidth=1.9,
             markersize=4.5,
             markerfacecolor="white",
             markeredgewidth=1.1,
             label=label,
         )
-        for label, _, color, marker in reliability_series[:-1]
+        for label, _, color, marker, linestyle in reliability_series[:-1]
     )
-    ax.legend(handles=legend_handles, loc="lower left", ncol=2, fontsize=7.5, frameon=True)
+    if show_legend:
+        ax.legend(
+            handles=legend_handles,
+            loc="lower left",
+            ncol=2,
+            fontsize=7.5,
+            frameon=True,
+            handlelength=4.0,
+        )
+    return legend_handles
 
 
 def plot_typical_performance(ax, perfect, robustness):
@@ -316,9 +358,9 @@ def plot_typical_performance(ax, perfect, robustness):
         key=lambda value: int(value[1:]),
     )
     series = [
-        (0.00, "MDSR, train noise 0", COLORS["MDSR, train noise 0"]),
-        (0.01, "MDSR, train noise 0.01", COLORS["MDSR, train noise 0.01"]),
-        (0.03, "MDSR, train noise 0.03", COLORS["MDSR, train noise 0.03"]),
+        (0.00, "MSSR, train noise 0", COLORS["MSSR, train noise 0"]),
+        (0.01, "MSSR, train noise 0.01", COLORS["MSSR, train noise 0.01"]),
+        (0.03, "MSSR, train noise 0.03", COLORS["MSSR, train noise 0.03"]),
     ]
     for noise, label, color in series:
         values = robustness[noise].loc[common_ids, list(TEST_COLUMNS.values())]
@@ -356,7 +398,8 @@ def plot_typical_performance(ax, perfect, robustness):
         markeredgewidth=1.2,
         linewidth=2,
         markersize=8,
-        linestyle="--",
+        linestyle=(0, (5, 2, 1.5, 2)),
+        dash_capstyle="butt",
         label="Perfect equations (clean)",
     )
     ax.fill_between(
@@ -366,13 +409,35 @@ def plot_typical_performance(ax, perfect, robustness):
         color=COLORS["Perfect equations (clean)"],
         alpha=0.10,
     )
-    ax.set_title("(B) Typical performance")
+    ax.set_title("(C)Typical performance", fontname='Arial')
     ax.set_xlabel("Testing noise")
     ax.set_ylabel(r"$R^2$ (median; band = IQR)")
     ax.set_xticks(TEST_NOISE, ["0", "0.01", "0.03", "0.05", "0.10"])
     ax.set_ylim(0.82, 1.01)
     ax.grid(axis="y", linestyle=":", alpha=0.35)
-    ax.legend(loc="lower left", ncol=2, fontsize=7.5, frameon=True)
+    ax.legend(loc="lower left", ncol=2, fontsize=7.5, frameon=True, handlelength=4.0)
+
+def plot_wasserstein(ax, xlsx):
+    ax.set_title("(B) Wasserstein distance", fontname='Arial')
+
+    df = pd.read_excel(xlsx, sheet_name=0, engine="openpyxl")
+    df.set_index(df.columns[0], inplace=True)
+    print(df)
+    wasserstein_values = [0, 0.25, 0.4]
+    ax.set_ylim(0.98*min(df.min()), 1.02*max(df.max()))
+    ax.set_xticks(wasserstein_values, ["0", "0.25", "0.4"])
+    ax.set_xlabel("(B) Wasserstein Distance")
+    ax.set_ylabel(r"Success rate ($\mathrm{R}^2 \geq 0.9999$)")
+    for column, (label, noise, marker) in WASSERSTEIN_SERIES.items():
+        ax.plot(
+            wasserstein_values,
+            df[column].to_numpy(),
+            color=COLORS[label],
+            marker=marker,
+            linestyle=TRAIN_NOISE_LINESTYLES[noise],
+            dash_capstyle="butt",
+            label=label,
+        )
 
 
 def main():
@@ -389,15 +454,15 @@ def main():
             "axes.spines.right": True,
         }
     )
-    fig = plt.figure(figsize=(14.0, 10.0))
+    fig = plt.figure(figsize=(14.0, 15.0))
     grid = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.0], hspace=0.45, wspace=0.24)
     distribution_ax = fig.add_subplot(grid[0, :])
     typical_ax = fig.add_subplot(grid[1, 0])
     comparison_ax = fig.add_subplot(grid[1, 1])
     plot_distributions(distribution_ax, mdsr, mdsr_parameters, llm)
     plot_typical_performance(typical_ax, perfect, robustness)
-    plot_noise_comparison(comparison_ax, mdsr, llm, perfect, robustness)
-    distribution_ax.legend(loc="upper left", ncol=3, frameon=True, fontsize=8.5)
+    plot_noise_comparison(comparison_ax, mdsr, llm, perfect, robustness, title="(B) Noise")
+    distribution_ax.legend(loc="upper left", ncol=3, frameon=True, fontsize=8.5, handlelength=3)
     for ax in (distribution_ax, typical_ax, comparison_ax):
         ax.set_axisbelow(True)
         ax.tick_params(which="both", top=True, right=True)
@@ -406,7 +471,36 @@ def main():
     fig.savefig(PDF_OUTPUT, format="pdf", bbox_inches="tight", facecolor="white")
     print(f"Saved {OUTPUT}")
     print(f"Saved {PDF_OUTPUT}")
-
+    fig = plt.figure(figsize=(14.0, 5.0))
+    grid = fig.add_gridspec(1, 2, width_ratios=[3.0, 2.0], hspace=0.45, wspace=0.24)
+    comparison_ax = fig.add_subplot(grid[0, 0])
+    wasserstein_ax = fig.add_subplot(grid[0, 1])
+    legend_handles = plot_noise_comparison(
+        comparison_ax,
+        mdsr,
+        llm,
+        perfect,
+        robustness,
+        title="",
+        show_legend=False,
+    )
+    plot_wasserstein(wasserstein_ax, "MSSR/plot/Wassertein.xlsx")
+    comparison_ax.set_title("")
+    wasserstein_ax.set_title("")
+    legend_handles = [legend_handles[index] for index in (0, 4, 1, 5, 2, 6, 3)]
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.94),
+        ncol=4,
+        fontsize=8,
+        frameon=True,
+        handlelength=4.0,
+    )
+    fig.subplots_adjust(top=0.82, bottom=0.22)
+    fig.tight_layout()
+    plt.savefig(BASE_DIR / "combined_noiseand_Wassertein.png", dpi=1200, bbox_inches="tight", facecolor="white")
+    print(f"Saved {BASE_DIR / 'combined_noiseand_Wassertein.png'}")
 
 if __name__ == "__main__":
     main()
